@@ -7,47 +7,51 @@ import threading
 class Zoznam(object):
 	
 	
-	_data = {}
+	data = {}
+	lock = threading.Lock()
 
 	def write_out(self):
-		print self._data
+		self.lock.acquire()
+		print self.data
+		self.lock.release()
 
 	def remove(self,name):
-
-		if name in self._data.keys():
-			del self._data[name]
-
+		self.lock.acquire()
+		if name in self.data.keys():
+			del self.data[name]
+		self.lock.release()
 
 	def new_client(self,name,handler):
-
-		if name in self._data.keys():
-			
+		self.lock.acquire()
+		if name in self.data.keys():
+			self.lock.release()
 			handler.push("Name already exists. You will be disconected" + handler.get_terminator())
 			handler.handle_close(info = "duplicate")
 		else:
-			self._data[name] = handler
+			self.data[name] = handler
+			self.lock.release()	
 			self.send_all('New client connected under name: ' + name + handler.get_terminator(),"server")
-
+		
 
 	def send_all(self,msg,sender):
-
-		for user in self._data.keys():
-			if hasattr(self._data[user],'push'):
-				self.send(sender,user,msg)
-
+		self.lock.acquire()
+		for user in self.data.keys():
+			if hasattr(self.data[user],'push'):
+				self.send(sender,user,self.data[user],msg)
+		self.lock.release()
 	
 	def send_to_list(self,users,msg,sender):
-
+		self.lock.acquire()
 		for user in users:
-			if user in self._data.keys():
-				self.send(sender,user,msg)
+			if user in self.data.keys():		
+				self.send(sender,user,self.data[user],msg)
+		self.lock.release()
 
 
-	def send(self,sender,reciever,msg):
-
+	def send(self,sender,reciever,reciever_handler,msg):
 		if sender != reciever:
-			self._data[reciever].push('. ' + msg)
+			reciever_handler.push('. ' + msg)
 		else:
-			self._data[reciever].push('\033[A' + '> ' + msg)
-
+			reciever_handler.push('\033[A' + '> ' + msg)
+		
 
