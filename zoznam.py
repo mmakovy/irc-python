@@ -10,6 +10,12 @@ class Zoznam(object):
 	data = {}
 	lock = threading.Lock()
 
+	def get_data_length(self):
+		self.lock.acquire()
+		length = len(self.data)
+		self.lock.release()
+		return length
+
 	def write_out(self):
 		self.lock.acquire()
 		print self.data
@@ -21,17 +27,21 @@ class Zoznam(object):
 			del self.data[name]
 		self.lock.release()
 
-	def new_client(self,name,handler):
+	def new_client(self,name,handler,capacity):
 		self.lock.acquire()
+		#if len(self.data) < capacity:
 		if name in self.data.keys():
 			self.lock.release()
-			handler.push("Name already exists. You will be disconected" + handler.get_terminator())
+			handler.push("Name already exists. You will be disconected" + handler.get_terminator())		
 			handler.handle_close(info = "duplicate")
 		else:
 			self.data[name] = handler
 			self.lock.release()	
 			self.send_all('New client connected under name: ' + name + handler.get_terminator(),"server")
-		
+		#else:
+			#self.lock.release()
+			#handler.push("Server is full" + handler.get_terminator())
+			#handler.handle_close(info = "full server")	
 
 	def send_all(self,msg,sender):
 		self.lock.acquire()

@@ -8,19 +8,18 @@ import os
 import signal
 import sys
  
-chat_room = {}
-
-welcome = ''
- 
 class ChatHandler(asynchat.async_chat):
     msg_count = 0
     name = 'unamed'
     data = zoznam.Zoznam()
     def __init__(self, sock):
-        asynchat.async_chat.__init__(self, sock=sock, map=chat_room)
+        asynchat.async_chat.__init__(self, sock=sock)
  
         self.set_terminator('\n')
         self.buffer = []
+	if self.data.get_data_length() >= capacity:
+		self.push("Server is full" + self.get_terminator())
+		self.handle_close(info = "full server")
 	self.push(welcome + ' Please state your name:'	+ self.get_terminator())
  
     def collect_incoming_data(self, data):
@@ -34,7 +33,7 @@ class ChatHandler(asynchat.async_chat):
 
 	if (self.msg_count == 0):
 		self.name = msg
-		self.data.new_client(msg,self) 
+		self.data.new_client(msg,self,capacity) 
 	else:
 		if '@' in msg:
 			splited = msg.split()
@@ -51,7 +50,7 @@ class ChatHandler(asynchat.async_chat):
 	self.msg_count = self.msg_count + 1
 
     def handle_close(self,info=''):
-	print("Client disconnected " + self.name + info)
+	print("Client disconnected " + self.name + ' ' + info)
 	self.data.send_all("Client disconected " + self.name + ' ' + info + self.get_terminator(),'server')
 	if not 'duplicate' in info:
 		self.data.remove(self.name)
@@ -60,7 +59,7 @@ class ChatHandler(asynchat.async_chat):
 		 
 class ChatServer(asyncore.dispatcher):
     def __init__(self, host, port):
-        asyncore.dispatcher.__init__(self, map=chat_room)
+        asyncore.dispatcher.__init__(self)
         self.create_socket(socket.AF_INET, socket.SOCK_STREAM)
         self.bind((host, port))
         self.listen(5)
@@ -112,12 +111,10 @@ server = ChatServer(address, port)
 
 def signal_handler(signal, frame):
         print('You pressed Ctrl+C!')
-	#data1 = zoznam.Zoznam()
-	#data1.send_all("Server is closing" + )
 	server.close()
         sys.exit(1)
 
 signal.signal(signal.SIGINT, signal_handler)
  
 print('Serving on ' + address + ':' + str(port))
-asyncore.loop(map=chat_room)
+asyncore.loop()
