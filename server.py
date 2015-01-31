@@ -1,75 +1,37 @@
-import asynchat
 import asyncore
-import socket
 import zoznam
 import optparse
 import ConfigParser
 import os
 import signal
 import sys
- 
-class ChatHandler(asynchat.async_chat):
-    msg_count = 0
-    name = 'unamed'
-    data = zoznam.Zoznam()
-    def __init__(self, sock):
-        asynchat.async_chat.__init__(self, sock=sock)
- 
-        self.set_terminator('\n')
-        self.buffer = []
-	if self.data.get_data_length() >= capacity:
-		self.push("Server is full" + self.get_terminator())
-		self.handle_close(info = "full server")
-	self.push(welcome + ' Please state your name:'	+ self.get_terminator())
- 
-    def collect_incoming_data(self, data):
-        self.buffer.append(data)
- 
-    def found_terminator(self):
-        msg = ''.join(self.buffer)
-	if '\r' in msg:
-		msg = msg[:-1]
-		self.set_terminator('\r\n')
+import httplib
+import Queue
+import threading
+import chat_server
+import chat_handler
 
-	if (self.msg_count == 0):
-		self.name = msg
-		self.data.new_client(msg,self,capacity) 
-	else:
-		if '@' in msg:
-			splited = msg.split()
-			users = [self.name]
-			for word in splited:				
-				if '@' in word:
-					users.append(word[1:])
-			self.data.send_to_list(users,self.name + ": " + msg + self.get_terminator(),self.name)
+q1 = Queue.Queue()
+
+def title_thread(q1):
+	data = zoznam.Zoznam()
+	while True:
+		item = q1.get()
+		site,users = item
+		conn = httplib.HTTPConnection(site)
+		try:
+			conn.request("GET", "/")
+			response = conn.getresponse()
+			source_code = response.read()
+			cut = source_code.split('<title>')[1]
+                	title = cut.split('</title>')[0] 
+		except Exception:
+			title = 'URL could not be resolved'
+
+		if users is None:
+			data.send_all(title,'server')
 		else:
-			print (self.name + ': ' +  msg)
-			self.data.send_all(self.name + ": " + msg + self.get_terminator(),self.name)
-	
-	self.buffer = []
-	self.msg_count = self.msg_count + 1
-
-    def handle_close(self,info=''):
-	print("Client disconnected " + self.name + ' ' + info)
-	self.data.send_all("Client disconected " + self.name + ' ' + info + self.get_terminator(),'server')
-	if not 'duplicate' in info:
-		self.data.remove(self.name)
-	self.close()
-
-		 
-class ChatServer(asyncore.dispatcher):
-    def __init__(self, host, port):
-        asyncore.dispatcher.__init__(self)
-        self.create_socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.bind((host, port))
-        self.listen(5)
- 
-    def handle_accept(self):
-        pair = self.accept()
-        if pair is not None:
-            sock, addr = pair
-            print 'Incoming connection from %s' % repr(addr)
-            handler = ChatHandler(sock)
+			data.send_to_list(users,title,'server')
 
 option_parser = optparse.OptionParser()
 option_parser.add_option('-i', '--ip', dest='address', help='IP Address')
@@ -101,20 +63,28 @@ else:
     welcome = options.welcome
 
 if options.capacity is None and file_exists:
-    capacity = config.get("server", "capacity")
+    capacity = int(config.get("server", "capacity"))
 else:
     capacity = options.capacity
 
-
- 
-server = ChatServer(address, port)
-
 def signal_handler(signal, frame):
-        print('You pressed Ctrl+C!')
+	
+	data = zoznam.Zoznam()
+	data.close_all()
 	server.close()
-        sys.exit(1)
+	asyncore.close_all()
+	newThread.join(1)
+        sys.exit(0)
 
-signal.signal(signal.SIGINT, signal_handler)
+if __name__ == "__main__":
+
+	newThread = threading.Thread(target=title_thread,args=(q1,))
+	newThread.daemon = True
+	newThread.start()
  
-print('Serving on ' + address + ':' + str(port))
-asyncore.loop()
+	server = chat_server.ChatServer(address, port,q1)
+
+	signal.signal(signal.SIGINT, signal_handler)
+ 
+	print('Serving on ' + address + ':' + str(port))
+	asyncore.loop()
